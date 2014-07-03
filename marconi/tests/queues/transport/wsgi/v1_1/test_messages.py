@@ -20,6 +20,8 @@ import ddt
 import falcon
 import mock
 import six
+import msgpack
+
 from testtools import matchers
 
 from marconi.openstack.common import jsonutils
@@ -58,6 +60,12 @@ class MessagesBaseTest(base.V1_1Base):
         doc = '{"_ttl": 60}'
         self.simulate_put(self.queue_path, body=doc, headers=self.headers)
 
+    def _serialize(self, message, **kwargs):
+        return jsonutils.dumps(message, kwargs)
+
+    def _deserialize(self, message):
+        return jsonutils.loads(message)
+
     def tearDown(self):
         self.simulate_delete(self.queue_path, headers=self.headers)
         if self.conf.pooling:
@@ -68,13 +76,13 @@ class MessagesBaseTest(base.V1_1Base):
         super(MessagesBaseTest, self).tearDown()
 
     def _test_post(self, sample_messages):
-        sample_doc = jsonutils.dumps(sample_messages)
+        sample_doc = self._serialize(sample_messages)
 
         result = self.simulate_post(self.messages_path,
                                     body=sample_doc, headers=self.headers)
         self.assertEqual(self.srmock.status, falcon.HTTP_201)
 
-        result_doc = jsonutils.loads(result[0])
+        result_doc = self._deserialize(result[0])
 
         msg_ids = self._get_msg_ids(self.srmock.headers_dict)
         self.assertEqual(len(msg_ids), len(sample_messages))
@@ -104,13 +112,14 @@ class MessagesBaseTest(base.V1_1Base):
                 self.assertEqual(self.srmock.status, falcon.HTTP_404)
 
                 # Correct project ID
+                # TODO msgpack this case
                 result = self.simulate_get(message_uri, headers=self.headers)
                 self.assertEqual(self.srmock.status, falcon.HTTP_200)
                 self.assertEqual(self.srmock.headers_dict['Content-Location'],
                                  message_uri)
 
                 # Check message properties
-                message = jsonutils.loads(result[0])
+                message = self._deserialize(result[0])
                 self.assertEqual(message['href'], message_uri)
                 self.assertEqual(message['body'], lookup[message['ttl']])
 
@@ -126,7 +135,7 @@ class MessagesBaseTest(base.V1_1Base):
                                    headers=self.headers)
 
         self.assertEqual(self.srmock.status, falcon.HTTP_200)
-        result_doc = jsonutils.loads(result[0])
+        result_doc = self._deserialize(result[0])
         expected_ttls = set(m['ttl'] for m in sample_messages)
         actual_ttls = set(m['ttl'] for m in result_doc)
         self.assertFalse(expected_ttls - actual_ttls)
@@ -163,6 +172,7 @@ class MessagesBaseTest(base.V1_1Base):
         ]
 
         self._test_post(sample_messages)
+
 
     def test_post_multiple(self):
         sample_messages = [
@@ -237,7 +247,7 @@ class MessagesBaseTest(base.V1_1Base):
     @ddt.data(-1, 59, 1209601)
     def test_unacceptable_ttl(self, ttl):
         self.simulate_post(self.queue_path + '/messages',
-                           body=jsonutils.dumps([{'ttl': ttl,
+                           body=self._serialize([{'ttl': ttl,
                                                   'body': None}]),
                            headers=self.headers)
 
@@ -245,7 +255,7 @@ class MessagesBaseTest(base.V1_1Base):
 
     def test_exceeded_message_posting(self):
         # Total (raw request) size
-        doc = jsonutils.dumps([{'body': "some body", 'ttl': 100}] * 20,
+        doc = self._serialize([{'body': "some body", 'ttl': 100}] * 20,
                               indent=4)
 
         max_len = self.transport_cfg.max_message_size
@@ -324,8 +334,8 @@ class MessagesBaseTest(base.V1_1Base):
                          path + '?' + query_string)
 
         cnt = 0
-        while jsonutils.loads(body[0])['messages'] != []:
-            contents = jsonutils.loads(body[0])
+        while self._deserialize(body[0])['messages'] != []:
+            contents = self._deserialize(body[0])
             [target, params] = contents['links'][0]['href'].split('?')
 
             for msg in contents['messages']:
@@ -346,7 +356,7 @@ class MessagesBaseTest(base.V1_1Base):
                                  headers=self.headers)
         self.assertEqual(self.srmock.status, falcon.HTTP_200)
 
-        message_stats = jsonutils.loads(body[0])['messages']
+        message_stats = self._deserialize(body[0])['messages']
         self.assertEqual(self.srmock.headers_dict['Content-Location'],
                          self.queue_path + '/stats')
 
@@ -434,7 +444,7 @@ class MessagesBaseTest(base.V1_1Base):
     def test_delete_message_with_invalid_claim_doesnt_delete_message(self):
         path = self.queue_path
         resp = self._post_messages(path + '/messages', 1)
-        location = jsonutils.loads(resp[0])['resources'][0]
+        location = self._deserialize(resp[0])['resources'][0]
 
         self.simulate_delete(location, query_string='claim_id=invalid',
                              headers=self.headers)
@@ -455,13 +465,13 @@ class MessagesBaseTest(base.V1_1Base):
         body = self.simulate_get(path,
                                  query_string=query_string,
                                  headers=self.headers)
-        messages = jsonutils.loads(body[0])
+        messages = self._deserialize(body[0])
 
         self.assertNotIn(self.queue_path + '/messages/messages',
                          messages[0]['href'])
 
     def _post_messages(self, target, repeat=1):
-        doc = jsonutils.dumps([{'body': 239, 'ttl': 300}] * repeat)
+        doc = self._serialize([{'body': 239, 'ttl': 300}] * repeat)
         return self.simulate_post(target, body=doc,
                                   headers=self.headers)
 
@@ -470,6 +480,39 @@ class MessagesBaseTest(base.V1_1Base):
 
     def _get_msg_ids(self, headers):
         return headers['location'].rsplit('=', 1)[-1].split(',')
+
+class TestMessagesMsgpack(MessagesBaseTest):
+    packer = msgpack.Packer(use_bin_type=True)
+    unpacker = msgpack.Unpacker(encoding='utf-8')
+
+    def setup(self):
+        super(TestMessagesMsgpack, self).setUp()
+        self.headers['Content-Type'] = 'application/x-msgpack'
+
+    def serialize(self, message):
+        packer.pack(message)
+
+    def deserialize(self, incoming):
+        unpacker.feed(incoming).unpack()
+
+    def test_unicode_strings(self):
+        """Ensure unicode strings are written and read back"""
+        unicode_message = [
+            {'body': {'city': u'\u6771\u4EAC (Tokyo)'}, 'ttl': 200},
+        ]
+# TODO: Investigate if anything special needs to be done in PY2.  Did cursory check, doesn't appear so.
+#        if six.PY2:
+#            unicode_message[0]['body']['city'] = unicode_message[0]['body']['city'].encode('utf-8')
+
+        self._test_post(unicode_message)
+
+    def test_binary_strings(self):
+        """Ensure binary objects written and read back"""
+        unicode_message = [
+            {'body': {'city': b'Tokyo'}, 'ttl': 200},
+        ]
+        self._test_post(unicode_message)
+
 
 
 class TestMessagesSqlalchemy(MessagesBaseTest):

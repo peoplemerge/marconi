@@ -46,6 +46,7 @@ def create_marconi_headers(conf):
     headers = {
         "User-Agent": conf.headers.user_agent,
         "Accept": "application/json",
+ #       "Accept": "application/x-msgpack",
         "X-Project-ID": conf.headers.project_id,
         "Client-ID": str(uuid.uuid1()),
     }
