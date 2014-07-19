@@ -150,7 +150,7 @@ class CollectionResource(object):
             raise wsgi_errors.HTTPBadRequestAPI(six.text_type(ex))
 
         # Pull out just the fields we care about
-        # TODO look for msgpack here?
+        LOG.debug(u'request: %(req)s')
         messages = wsgi_utils.filter_stream(
             req.stream,
             req.content_length,
