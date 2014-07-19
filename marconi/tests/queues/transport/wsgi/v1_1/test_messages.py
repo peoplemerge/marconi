@@ -19,9 +19,8 @@ import uuid
 import ddt
 import falcon
 import mock
-import six
 import msgpack
-
+import six
 from testtools import matchers
 
 from marconi.openstack.common import jsonutils
@@ -112,7 +111,7 @@ class MessagesBaseTest(base.V1_1Base):
                 self.assertEqual(self.srmock.status, falcon.HTTP_404)
 
                 # Correct project ID
-                # TODO msgpack this case
+                # TODO(peoplemerge) msgpack this case
                 result = self.simulate_get(message_uri, headers=self.headers)
                 self.assertEqual(self.srmock.status, falcon.HTTP_200)
                 self.assertEqual(self.srmock.headers_dict['Content-Location'],
@@ -172,7 +171,6 @@ class MessagesBaseTest(base.V1_1Base):
         ]
 
         self._test_post(sample_messages)
-
 
     def test_post_multiple(self):
         sample_messages = [
@@ -481,43 +479,50 @@ class MessagesBaseTest(base.V1_1Base):
     def _get_msg_ids(self, headers):
         return headers['location'].rsplit('=', 1)[-1].split(',')
 
-class TestMessagesMsgpack(MessagesBaseTest):
-    packer = msgpack.Packer(use_bin_type=True)
-    unpacker = msgpack.Unpacker(encoding='utf-8')
-
-    def setup(self):
-        super(TestMessagesMsgpack, self).setUp()
-        self.headers['Content-Type'] = 'application/x-msgpack'
-
-    def serialize(self, message):
-        packer.pack(message)
-
-    def deserialize(self, incoming):
-        unpacker.feed(incoming).unpack()
-
-    def test_unicode_strings(self):
-        """Ensure unicode strings are written and read back"""
-        unicode_message = [
-            {'body': {'city': u'\u6771\u4EAC (Tokyo)'}, 'ttl': 200},
-        ]
-# TODO: Investigate if anything special needs to be done in PY2.  Did cursory check, doesn't appear so.
-#        if six.PY2:
-#            unicode_message[0]['body']['city'] = unicode_message[0]['body']['city'].encode('utf-8')
-
-        self._test_post(unicode_message)
-
-    def test_binary_strings(self):
-        """Ensure binary objects written and read back"""
-        unicode_message = [
-            {'body': {'city': b'Tokyo'}, 'ttl': 200},
-        ]
-        self._test_post(unicode_message)
-
-
 
 class TestMessagesSqlalchemy(MessagesBaseTest):
     config_file = 'wsgi_sqlalchemy.conf'
 
+
+class TestMessagesMsgpack(MessagesBaseTest):
+    config_file = 'wsgi_sqlalchemy.conf'
+
+    def setup(self):
+        super(TestMessagesMsgpack, self).setUp()
+        #self.packer = msgpack.Packer(use_bin_type=True)
+        self.unpacker = msgpack.Unpacker(encoding='utf-8')
+        self.headers['Content-Type'] = 'application/x-msgpack'
+
+    def tearDown(self):
+        super(TestMessagesMsgpack, self).tearDown()
+
+    def _serialize(self, message):
+        if not hasattr(self, "packer"):
+            setattr(self, "packer", msgpack.Packer(use_bin_type=True))
+        self.packer.pack(message)
+
+    def _deserialize(self, incoming):
+        self.unpacker.feed(incoming).unpack()
+
+    def test_unicode_strings(self):
+        """Ensure unicode strings are written and read back."""
+        unicode_message = [
+            {'body': {'city': u'\u6771\u4EAC (Tokyo)'}, 'ttl': 200},
+        ]
+# TODO(peoplemerge): Investigate if anything special needs to be done in PY2.
+# Did cursory check, doesn't appear so.  For example:
+#    if six.PY2:
+#        unicode_message[0]['body']['city'] =
+#                           unicode_message[0]['body']['city'].encode('utf-8')
+
+        self._test_post(unicode_message)
+
+    def test_binary_strings(self):
+        """Ensure binary objects written and read back."""
+        unicode_message = [
+            {'body': {'city': b'Tokyo'}, 'ttl': 200},
+        ]
+        self._test_post(unicode_message)
 
 class TestMessagesMongoDB(MessagesBaseTest):
     config_file = 'wsgi_mongodb.conf'

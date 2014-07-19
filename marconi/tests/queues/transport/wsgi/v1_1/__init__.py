@@ -29,6 +29,7 @@ TestDefaultLimits = test_default_limits.TestDefaultLimits
 TestHomeDocument = test_home.TestHomeDocument
 TestMediaType = test_media_type.TestMediaType
 TestMessagesFaultyDriver = test_messages.TestMessagesFaultyDriver
+TestMessagesMsgpack = test_messages.TestMessagesMsgpack
 TestMessagesMongoDB = test_messages.TestMessagesMongoDB
 TestMessagesMongoDBPooled = test_messages.TestMessagesMongoDBPooled
 TestMessagesSqlalchemy = test_messages.TestMessagesSqlalchemy
