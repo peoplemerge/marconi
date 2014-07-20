@@ -497,12 +497,14 @@ class TestMessagesMsgpack(MessagesBaseTest):
         super(TestMessagesMsgpack, self).tearDown()
 
     def _serialize(self, message):
+# TODO(peoplemerge) packer/unpacker do not seem to make it from setup()... why?
         if not hasattr(self, "packer"):
             setattr(self, "packer", msgpack.Packer(use_bin_type=True))
         self.packer.pack(message)
 
     def _deserialize(self, incoming):
-        self.unpacker.feed(incoming).unpack()
+        self.unpacker.feed(incoming)
+        return unpacker.unpack()
 
     def test_unicode_strings(self):
         """Ensure unicode strings are written and read back."""

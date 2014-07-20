@@ -15,6 +15,7 @@
 
 import falcon
 import six
+import msgpack
 
 from marconi.i18n import _
 import marconi.openstack.common.log as logging
@@ -23,6 +24,7 @@ from marconi.queues.transport import utils
 from marconi.queues.transport import validation
 from marconi.queues.transport.wsgi import errors as wsgi_errors
 from marconi.queues.transport.wsgi import utils as wsgi_utils
+from marconi.openstack.common import strutils
 
 LOG = logging.getLogger(__name__)
 
@@ -150,12 +152,17 @@ class CollectionResource(object):
             raise wsgi_errors.HTTPBadRequestAPI(six.text_type(ex))
 
         # Pull out just the fields we care about
-        LOG.debug(u'request: %(req)s')
+        LOG.debug(u'accepts msgpack?: %(accepts)s, '
+                  'content type: %(content_type)s', {
+                    'accepts': req.client_accepts('application/x-msgpack'),
+                    'content_type': req.content_type
+                  }
+                 )
         messages = wsgi_utils.filter_stream(
             req.stream,
             req.content_length,
             MESSAGE_POST_SPEC,
-            doctype=wsgi_utils.JSONArray)
+            doctype=wsgi_utils.doctype_of_content(req.content_type))
 
         # Enqueue the messages
         partial = False

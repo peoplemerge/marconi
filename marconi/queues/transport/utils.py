@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#TODO(peoplemerge): This file contains only json concepts, rename?
 import json
 
 from marconi.openstack.common import strutils

@@ -13,11 +13,13 @@
 # the License.
 
 import uuid
+import msgpack
 
 from marconi.i18n import _
 import marconi.openstack.common.log as logging
 from marconi.queues.transport import utils
 from marconi.queues.transport.wsgi import errors
+from marconi.openstack.common import strutils
 
 
 JSONObject = dict
@@ -26,39 +28,17 @@ JSONObject = dict
 JSONArray = list
 """Represents a JSON array in Python."""
 
+class MsgpackArray(list):
+# TODO(peoplemerge): We're loosely type, so what's a better way to 
+#                    specfy this?
+    """Represents a Msgpack array in Python."""
+    pass
+
+
+
 LOG = logging.getLogger(__name__)
 
-
-# TODO(kgriffs): Consider moving this to Falcon and/or Oslo
-def filter_stream(stream, len, spec=None, doctype=JSONObject):
-    """Reads, deserializes, and validates a document from a stream.
-
-    :param stream: file-like object from which to read an object or
-        array of objects.
-    :param len: number of bytes to read from stream
-    :param spec: (Default None) Iterable describing expected fields,
-        yielding tuples with the form of:
-
-            (field_name, value_type).
-
-        Note that value_type may either be a Python type, or the
-        special string '*' to accept any type. If spec is None, the
-        incoming documents will not be validated.
-    :param doctype: type of document to expect; must be either
-        JSONObject or JSONArray.
-    :raises: HTTPBadRequest, HTTPServiceUnavailable
-    :returns: A sanitized, filtered version of the document list read
-        from the stream. If the document contains a list of objects,
-        each object will be filtered and returned in a new list. If,
-        on the other hand, the document is expected to contain a
-        single object, that object will be filtered and returned as
-        a single-element iterable.
-    """
-
-    if len is None:
-        description = _(u'Request body can not be empty')
-        raise errors.HTTPBadRequestBody(description)
-
+def _filter_json(stream, len, spec, doctype):
     try:
         # TODO(kgriffs): read_json should stream the resulting list
         # of messages, returning a generator rather than buffering
@@ -96,7 +76,71 @@ def filter_stream(stream, len, spec=None, doctype=JSONObject):
 
         return [filter(obj, spec) for obj in document]
 
-    raise TypeError('doctype must be either a JSONObject or JSONArray')
+
+# TODO(peoplemerge): DRY this & _filter_json out
+def _filter_msgpack(stream, len, spec, doctype):
+    try:
+# TODO(peoplemerge): can we avoid instantiating the unpacker each time
+        unpacker = msgpack.Unpacker(encoding='utf-8')
+        unpacker.feed(stream.read(len))
+# TODO(peoplemerge): this loads the entire thing in memory, would be better
+#                    to read bit by bit
+        document = unpacker.unpack()
+
+    except Exception as ex:
+        # Error while reading from the network/server
+        LOG.exception(ex)
+        description = _(u'Request body could not be read.')
+        raise errors.HTTPServiceUnavailable(description)
+    
+# TODO(peoplemerge): if doctype is MsgpackArray:
+#                       if not isinstance(document, MsgpackArray):
+#                           raise errors.HTTPDocumentTypeNotSupported()
+
+    if spec is None:
+        return document
+
+    return [filter(obj, spec) for obj in document]
+
+
+# TODO(kgriffs): Consider moving this to Falcon and/or Oslo
+def filter_stream(stream, len, spec=None, doctype=JSONObject):
+    """Reads, deserializes, and validates a document from a stream.
+
+    :param stream: file-like object from which to read an object or
+        array of objects.
+    :param len: number of bytes to read from stream
+    :param spec: (Default None) Iterable describing expected fields,
+        yielding tuples with the form of:
+
+            (field_name, value_type).
+
+        Note that value_type may either be a Python type, or the
+        special string '*' to accept any type. If spec is None, the
+        incoming documents will not be validated.
+    :param doctype: type of document to expect; must be either
+        JSONObject, JSONArray, or MsgpackArray.
+    :raises: HTTPBadRequest, HTTPServiceUnavailable
+    :returns: A sanitized, filtered version of the document list read
+        from the stream. If the document contains a list of objects,
+        each object will be filtered and returned in a new list. If,
+        on the other hand, the document is expected to contain a
+        single object, that object will be filtered and returned as
+        a single-element iterable.
+    """
+    if len is None:
+        description = _(u'Request body can not be empty')
+        raise errors.HTTPBadRequestBody(description)
+    if doctype is JSONArray or doctype is JSONObject:
+        return _filter_json(stream, len, spec, doctype)
+    elif doctype is MsgpackArray:
+# TODO(peoplmerge): look for a usecase for JSONObject, to see how 
+#                   MsgpackObject needs to be
+        return _filter_msgpack(stream, len, spec, doctype)
+    else:
+        raise TypeError('doctype must be JSONObject, JSONArray, or '
+                        'MsgpackArray')
+    
 
 
 # TODO(kgriffs): Consider moving this to Falcon and/or Oslo
@@ -170,3 +214,10 @@ def get_client_uuid(req):
     except ValueError:
         description = _(u'Malformed hexadecimal UUID.')
         raise errors.HTTPBadRequestAPI(description)
+
+# TODO(peoplemerge): Would it be more cohesive to put this in messages.py?
+# TODO(peoplemerge): Documentation
+def doctype_of_content(content_type):
+    available_types = {'application/json': JSONArray,
+                       'application/x-msgpack': MsgpackArray}
+    return available_types.get(content_type, (lambda: JSONArray)())
