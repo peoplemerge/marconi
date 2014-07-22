@@ -489,22 +489,22 @@ class TestMessagesMsgpack(MessagesBaseTest):
 
     def setup(self):
         super(TestMessagesMsgpack, self).setUp()
-        #self.packer = msgpack.Packer(use_bin_type=True)
-        self.unpacker = msgpack.Unpacker(encoding='utf-8')
         self.headers['Content-Type'] = 'application/x-msgpack'
 
     def tearDown(self):
         super(TestMessagesMsgpack, self).tearDown()
 
     def _serialize(self, message):
-# TODO(peoplemerge) packer/unpacker do not seem to make it from setup()... why?
         if not hasattr(self, "packer"):
             setattr(self, "packer", msgpack.Packer(use_bin_type=True))
+# TODO(peoplemerge) packer/unpacker do not seem to make it from setup()... why?
         self.packer.pack(message)
 
     def _deserialize(self, incoming):
+        if not hasattr(self, "unpacker"):
+            setattr(self, "unpacker", msgpack.Unpacker(encoding='utf-8'))
         self.unpacker.feed(incoming)
-        return unpacker.unpack()
+        return self.unpacker.unpack()
 
     def test_unicode_strings(self):
         """Ensure unicode strings are written and read back."""
@@ -525,6 +525,7 @@ class TestMessagesMsgpack(MessagesBaseTest):
             {'body': {'city': b'Tokyo'}, 'ttl': 200},
         ]
         self._test_post(unicode_message)
+
 
 class TestMessagesMongoDB(MessagesBaseTest):
     config_file = 'wsgi_mongodb.conf'

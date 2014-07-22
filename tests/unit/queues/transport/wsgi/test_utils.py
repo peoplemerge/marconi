@@ -173,15 +173,15 @@ class TestUtils(testtools.TestCase):
                           utils.filter_stream, stream, length, None)
 
     def test_doctype_of_content(self):
-        self.assertEquals(utils.doctype_of_content('application/json'), 
-                          utils.JSONArray)
-        self.assertEquals(utils.doctype_of_content('application/x-msgpack'), 
-                          utils.MsgpackArray)
-        self.assertNotEquals(utils.doctype_of_content('application/x-msgpack'), 
-                          utils.JSONArray)
-        self.assertNotEquals(utils.doctype_of_content('application/json'), 
-                          utils.MsgpackArray)
-        self.assertEquals(utils.doctype_of_content(None), 
-                          utils.JSONArray)
-        self.assertEquals(utils.doctype_of_content('person/matilda'), 
-                          utils.JSONArray)
+        self.assertEqual(utils.doctype_of_content('application/json'),
+                         utils.JSONArray)
+        self.assertEqual(utils.doctype_of_content('application/x-msgpack'),
+                         utils.MsgpackArray)
+        self.assertNotEqual(utils.doctype_of_content('application/x-msgpack'),
+                            utils.JSONArray)
+        self.assertNotEqual(utils.doctype_of_content('application/json'),
+                            utils.MsgpackArray)
+        self.assertEqual(utils.doctype_of_content(None),
+                         utils.JSONArray)
+        self.assertEqual(utils.doctype_of_content('person/matilda'),
+                         utils.JSONArray)
