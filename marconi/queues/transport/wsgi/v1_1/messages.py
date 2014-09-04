@@ -141,7 +141,6 @@ class CollectionResource(object):
                   {'queue': queue_name, 'project': project_id})
 
         client_uuid = wsgi_utils.get_client_uuid(req)
-
         try:
             # Place JSON size restriction before parsing
             self._validate.message_length(req.content_length)
@@ -149,7 +148,6 @@ class CollectionResource(object):
             LOG.debug(ex)
             raise wsgi_errors.HTTPBadRequestAPI(six.text_type(ex))
 
-        # Pull out just the fields we care about
         LOG.debug(u'accepts msgpack?: %(accepts)s, '
                   'content type: %(content_type)s', {
                       'accepts': req.client_accepts('application/x-msgpack'),

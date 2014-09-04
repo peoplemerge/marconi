@@ -128,6 +128,7 @@ def filter_stream(stream, len, spec=None, doctype=JSONObject):
         single object, that object will be filtered and returned as
         a single-element iterable.
     """
+    import pdb; pdb.set_trace()
     if len is None:
         description = _(u'Request body can not be empty')
         raise errors.HTTPBadRequestBody(description)
@@ -215,7 +216,8 @@ def get_client_uuid(req):
         raise errors.HTTPBadRequestAPI(description)
 
 
-# TODO(peoplemerge): Would it be more cohesive to put this in messages.py?
+# TODO(peoplemerge): Would it be more cohesive to put this in messages.py
+#                    instead of doing all of this back-and-forth?
 # TODO(peoplemerge): Documentation
 def doctype_of_content(content_type):
     available_types = {'application/json': JSONArray,
